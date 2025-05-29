@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI牙医系统</title>
+    <link rel="stylesheet" href="/static/css/style_index.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧导航 -->
+        <nav class="sidebar">
+            <div class="nav-header">
+                <div class="nav-title">AI口腔</div>
+                <div class="nav-title">牙医大模型</div>
+                <button class="new-btn">新建</button>
+                <input type="text" class="search-box" placeholder="搜索历史记录">
+            </div>
+            <ul class="nav-list">
+                <li class="nav-item">识别记录1-1</li>
+                <li class="nav-item">识别记录1-2</li>
+                <li class="nav-item">识别记录1-3</li>
+                <!-- 更多记录... -->
+            </ul>
+        </nav>
+
+        <!-- 右侧内容 -->
+        <main class="main-content">
+            <div class="file-info">10303a1404w01.obj (4.1M)</div>
+
+            <div class="progress-section">
+                <p>正在读取文件...</p>
+                <p>正在识别中轴线...</p>
+                <p>中轴线识别成功，数据已生成</p>
+            </div>
+
+            <div class="model-container">
+                <!-- 3D模型占位 -->
+                <div class="model-viewer">
+                    <div class="model-marker"></div>
+                </div>
+
+                <!-- 数据表格 -->
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>编号</th>
+                                <th>x</th>
+                                <th>y</th>
+                                <th>z</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>0.12</td>
+                                <td>0.21</td>
+                                <td>1.32</td>
+                            </tr>
+                            <!-- 更多数据行... -->
+                        </tbody>
+                    </table>
+                    <div class="action-btns">
+                        <button class="action-btn">查看</button>
+                        <button class="action-btn">下载</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="upload-section">
+                <p>点击或拖动文件上传</p>
+                <p>支持单个或批量上传，支持格式：.tar .zip .pdf 单个文件最大不超过30M</p>
+                <button class="submit-btn">提交</button>
+            </div>
+
+            <div class="footer">
+                <p>内容由AI生成，仅供参考</p>
+                <p>请遵守《用户协议》、《个人信息保护规则》 基于牙医大模型，版本：V1.0.0</p>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

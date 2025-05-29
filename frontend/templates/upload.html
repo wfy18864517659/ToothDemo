@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>上传牙齿模型</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <header><h1>上传牙齿模型 (OBJ)</h1></header>
+    <section class="card upload-card">
+      <form action="/upload" method="post" enctype="multipart/form-data" onsubmit="document.getElementById('spinner').classList.remove('hidden')">
+        <input type="file" name="file" accept=".obj" required>
+        <button type="submit">上传并查看</button>
+        <div id="spinner" class="spinner hidden"></div>
+      </form>
+    </section>
+    <footer><p>© 2025 牙齿中轴线研究</p></footer>
+  </div>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
