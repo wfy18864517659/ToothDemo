@@ -1,56 +1,54 @@
-// 前端主要逻辑，针对 upload.html 和 viewer.html 两页分别处理
+// app.js - 前端主要逻辑，针对 upload.html 和 viewer.html 两页分别处理
 
 document.addEventListener('DOMContentLoaded', () => {
   // 上传页逻辑
-  const uploadBtn = document.getElementById('upload-btn');
-  if (uploadBtn) {
-    uploadBtn.onclick = async () => {
-      const input = document.getElementById('file-input');
-      if (!input.files.length) return;
-      const form = new FormData();
-      form.append('file', input.files[0]);
-      // POST /upload 会触发重定向到 /viewer
-      await fetch('/upload', { method: 'POST', body: form });
+  const uploadForm = document.getElementById('upload-form');
+  if (uploadForm) {
+    uploadForm.onsubmit = () => {
+      const spinner = document.getElementById('spinner');
+      spinner.classList.remove('hidden');
     };
   }
 
-  // 渲染页逻辑
+  // 查看页逻辑
   const renderArea = document.getElementById('render-area');
   if (!renderArea) return;
 
-  let scene, camera, renderer, controls, meshObj, midline;
+  // Three.js 初始化
+  const scene = new THREE.Scene();
+  const width = renderArea.clientWidth;
+  const height = window.innerHeight * 0.9;
+  const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 5000);
+  camera.position.set(0, 0, 300);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(width, height);
+  renderer.setClearColor(0xf0f0f0);
+  renderArea.appendChild(renderer.domElement);
+
+  // Controls
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.1;
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(100, 100, 100);
+  scene.add(dirLight);
+
+  // Raycaster
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  // Globals
+  let meshObj = null;
+  let midline = null;
   const angleDisplay = document.getElementById('angle-display');
   const extractBtn = document.getElementById('extract-btn');
   const selectBtn = document.getElementById('select-btn');
 
-  // 初始化 Three.js 场景
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(
-    45,
-    renderArea.clientWidth / (window.innerHeight * 0.6),
-    0.1,
-    1000
-  );
-  camera.position.set(0, 0, 200);
-
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(renderArea.clientWidth, window.innerHeight * 0.6);
-  renderer.setClearColor(0xf5f5f5);
-  renderArea.appendChild(renderer.domElement);
-
-  controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-
-  // 灯光
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  dirLight.position.set(0, 1, 1);
-  scene.add(dirLight);
-
-  // 射线拾取器
-  const raycaster = new THREE.Raycaster();
-
-  // 渲染循环
+  // Animation loop
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
@@ -58,71 +56,143 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   animate();
 
-  // 加载 OBJ 模型
+  // Load and setup mesh
   async function loadMesh() {
-    const resp = await fetch('/api/mesh');
-    const objText = await resp.text();
-    const loader = new THREE.OBJLoader();
-    meshObj = loader.parse(objText);
+    const res = await fetch('/api/mesh');
+    const objText = await res.text();
+    meshObj = new THREE.OBJLoader().parse(objText);
+    meshObj.traverse(child => {
+      if (child.isMesh) {
+        child.material = new THREE.MeshLambertMaterial({
+          color: 0xaaaaaa,
+          side: THREE.DoubleSide
+        });
+        child.geometry.computeVertexNormals();
+      }
+    });
+
+    // Scale & Center
+    const box = new THREE.Box3().setFromObject(meshObj);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = (Math.min(width, height) * 0.8) / maxDim;
+    meshObj.scale.set(scale, scale, scale);
+    box.setFromObject(meshObj);
+    const center = box.getCenter(new THREE.Vector3());
+    meshObj.position.sub(center);
+
     scene.add(meshObj);
+    camera.position.set(0, 0, maxDim * scale * 1.5);
+    controls.target.copy(new THREE.Vector3(0, 0, 0));
+    controls.update();
   }
   loadMesh();
 
-  // 提取中轴线
+  // Extract midline
   extractBtn.onclick = async () => {
+    if (!meshObj) return;
     const res = await fetch('/api/extract-midline');
     const { midline: pts } = await res.json();
     if (midline) scene.remove(midline);
-    const geo = new THREE.BufferGeometry().setFromPoints(
-      pts.map(p => new THREE.Vector3(...p))
-    );
+    const transformed = pts.map(p => {
+      return new THREE.Vector3(...p)
+        .multiplyScalar(meshObj.scale.x)
+        .add(meshObj.position);
+    });
+    const geo = new THREE.BufferGeometry().setFromPoints(transformed);
     midline = new THREE.Line(
       geo,
-      new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 4 })
+      new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 6, depthTest: false })
     );
     scene.add(midline);
   };
 
-  // 选择面片
+  // Pick face on click
   selectBtn.onclick = () => {
+    if (!meshObj) return;
+    controls.enabled = false;
+    renderer.domElement.style.cursor = 'crosshair';
     renderer.domElement.addEventListener('click', onPick, { once: true });
   };
 
   async function onPick(event) {
+    renderer.domElement.style.cursor = 'default';
+    controls.enabled = true;
+
     const rect = renderer.domElement.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera({ x, y }, camera);
-    const intersects = raycaster.intersectObject(meshObj, true);
-    if (!intersects.length) return;
-    const faceIndex = intersects[0].faceIndex;
-    const resp = await fetch('/api/select-face', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ faceIndex })
-    });
-    const data = await resp.json();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    // 清除旧高亮
-    scene.traverse(obj => {
-      if (obj.userData.highlight) scene.remove(obj);
-    });
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObject(meshObj, true);
+    console.log('hits:', hits);
+    if (!hits.length) return;
+    const hit = hits[0];
 
-    // 高亮放大面
-    const verts = data.expandedFace.vertices;
-    const faces = data.expandedFace.faces;
-    const expGeo = new THREE.BufferGeometry();
-    expGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts.flat(), 3));
-    expGeo.setIndex(faces.flat());
-    const expMesh = new THREE.Mesh(
-      expGeo,
-      new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8 })
+    // Clear old highlights
+    scene.children
+      .filter(o => o.userData.highlight)
+      .forEach(o => scene.remove(o));
+
+    // Mark point
+    const ptSize = meshObj.scale.x * 0.5;
+    const ptMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(ptSize, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false })
     );
-    expMesh.userData.highlight = true;
-    scene.add(expMesh);
+    ptMesh.position.copy(hit.point);
+    ptMesh.userData.highlight = true;
+    scene.add(ptMesh);
 
-    // 显示角度
-    angleDisplay.textContent = `Angle: ${data.angle.toFixed(2)}°`;
+    // Face vertices directly from hit.face.a/b/c
+    const geom = hit.object.geometry;
+    const posAttr = geom.attributes.position;
+    const { a, b, c } = hit.face;
+    const toWorld = v => v.multiplyScalar(meshObj.scale.x).add(meshObj.position);
+    const vA = new THREE.Vector3().fromBufferAttribute(posAttr, a);
+    const vB = new THREE.Vector3().fromBufferAttribute(posAttr, b);
+    const vC = new THREE.Vector3().fromBufferAttribute(posAttr, c);
+    [vA, vB, vC].forEach(v => toWorld(v));
+
+    // Highlight triangle (green)
+    const triGeo = new THREE.BufferGeometry().setFromPoints([vA, vB, vC]);
+    triGeo.setIndex([0, 1, 2]);
+    const triMat = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false
+    });
+    const triMesh = new THREE.Mesh(triGeo, triMat);
+    triMesh.userData.highlight = true;
+    scene.add(triMesh);
+
+    // Expanded region using same triangle center, radius = distance*10
+    const center = vA.clone().add(vB).add(vC).divideScalar(3);
+    const radius = vA.distanceTo(center) * 10;
+    const circGeo = new THREE.CircleGeometry(radius, 32);
+    const circMat = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.5,
+      depthTest: false,
+      depthWrite: false
+    });
+    const circMesh = new THREE.Mesh(circGeo, circMat);
+    circMesh.position.copy(center);
+    circMesh.lookAt(hit.face.normal);
+    circMesh.userData.highlight = true;
+    scene.add(circMesh);
+
+    // Compute and display angle
+    if (!midline) return;
+    const arr = midline.geometry.attributes.position.array;
+    const P0 = new THREE.Vector3(arr[0], arr[1], arr[2]);
+    const P1 = new THREE.Vector3(arr[arr.length - 3], arr[arr.length - 2], arr[arr.length - 1]);
+    const axis = P1.clone().sub(P0).normalize();
+    const normal = hit.face.normal.clone();
+    const angle = Math.acos(Math.max(-1, Math.min(1, normal.dot(axis)))) * 180 / Math.PI;
+    angleDisplay.textContent = `Angle: ${angle.toFixed(2)}°`;
   }
-}
-);
+});
