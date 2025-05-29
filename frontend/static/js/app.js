@@ -5,8 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const uploadForm = document.getElementById('upload-form');
   if (uploadForm) {
     uploadForm.onsubmit = () => {
-      const spinner = document.getElementById('spinner');
-      spinner.classList.remove('hidden');
+      document.getElementById('spinner').classList.remove('hidden');
     };
   }
 
@@ -94,11 +93,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const res = await fetch('/api/extract-midline');
     const { midline: pts } = await res.json();
     if (midline) scene.remove(midline);
-    const transformed = pts.map(p => {
-      return new THREE.Vector3(...p)
-        .multiplyScalar(meshObj.scale.x)
-        .add(meshObj.position);
-    });
+    const transformed = pts.map(p => new THREE.Vector3(...p)
+      .multiplyScalar(meshObj.scale.x)
+      .add(meshObj.position)
+    );
     const geo = new THREE.BufferGeometry().setFromPoints(transformed);
     midline = new THREE.Line(
       geo,
@@ -119,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderer.domElement.style.cursor = 'default';
     controls.enabled = true;
 
+    // Normalize mouse coords
     const rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -144,15 +143,16 @@ document.addEventListener('DOMContentLoaded', () => {
     ptMesh.userData.highlight = true;
     scene.add(ptMesh);
 
-    // Face vertices directly from hit.face.a/b/c
+    // Face vertices from hit.face
     const geom = hit.object.geometry;
     const posAttr = geom.attributes.position;
     const { a, b, c } = hit.face;
-    const toWorld = v => v.multiplyScalar(meshObj.scale.x).add(meshObj.position);
-    const vA = new THREE.Vector3().fromBufferAttribute(posAttr, a);
-    const vB = new THREE.Vector3().fromBufferAttribute(posAttr, b);
-    const vC = new THREE.Vector3().fromBufferAttribute(posAttr, c);
-    [vA, vB, vC].forEach(v => toWorld(v));
+    const vA = new THREE.Vector3().fromBufferAttribute(posAttr, a)
+      .multiplyScalar(meshObj.scale.x).add(meshObj.position);
+    const vB = new THREE.Vector3().fromBufferAttribute(posAttr, b)
+      .multiplyScalar(meshObj.scale.x).add(meshObj.position);
+    const vC = new THREE.Vector3().fromBufferAttribute(posAttr, c)
+      .multiplyScalar(meshObj.scale.x).add(meshObj.position);
 
     // Highlight triangle (green)
     const triGeo = new THREE.BufferGeometry().setFromPoints([vA, vB, vC]);
@@ -167,9 +167,9 @@ document.addEventListener('DOMContentLoaded', () => {
     triMesh.userData.highlight = true;
     scene.add(triMesh);
 
-    // Expanded region using same triangle center, radius = distance*10
-    const center = vA.clone().add(vB).add(vC).divideScalar(3);
-    const radius = vA.distanceTo(center) * 10;
+    // Expanded region: circle on triangle's plane
+    const centerPt = vA.clone().add(vB).add(vC).divideScalar(3);
+    const radius = vA.distanceTo(centerPt) * 10;
     const circGeo = new THREE.CircleGeometry(radius, 32);
     const circMat = new THREE.MeshBasicMaterial({
       color: 0xffff00,
@@ -180,8 +180,13 @@ document.addEventListener('DOMContentLoaded', () => {
       depthWrite: false
     });
     const circMesh = new THREE.Mesh(circGeo, circMat);
-    circMesh.position.copy(center);
-    circMesh.lookAt(hit.face.normal);
+    // align plane to face normal
+    const normal = hit.face.normal.clone();
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1), normal
+    );
+    circMesh.setRotationFromQuaternion(quaternion);
+    circMesh.position.copy(centerPt);
     circMesh.userData.highlight = true;
     scene.add(circMesh);
 
@@ -191,8 +196,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const P0 = new THREE.Vector3(arr[0], arr[1], arr[2]);
     const P1 = new THREE.Vector3(arr[arr.length - 3], arr[arr.length - 2], arr[arr.length - 1]);
     const axis = P1.clone().sub(P0).normalize();
-    const normal = hit.face.normal.clone();
-    const angle = Math.acos(Math.max(-1, Math.min(1, normal.dot(axis)))) * 180 / Math.PI;
+    const faceNormal = normal.clone();
+    const angle = Math.acos(Math.max(-1, Math.min(1, faceNormal.dot(axis)))) * 180 / Math.PI;
     angleDisplay.textContent = `Angle: ${angle.toFixed(2)}°`;
   }
 });
