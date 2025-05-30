@@ -197,7 +197,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const P1 = new THREE.Vector3(arr[arr.length - 3], arr[arr.length - 2], arr[arr.length - 1]);
     const axis = P1.clone().sub(P0).normalize();
     const faceNormal = normal.clone();
-    const angle = Math.acos(Math.max(-1, Math.min(1, faceNormal.dot(axis)))) * 180 / Math.PI;
+    const dot = Math.max(-1, Math.min(1, faceNormal.dot(axis)));
+    const theta = Math.acos(Math.abs(dot)) * 180 / Math.PI;
+    const angle = 90 - theta;  // plane-line angle
     angleDisplay.textContent = `Angle: ${angle.toFixed(2)}°`;
+
   }
 });
